@@ -1,0 +1,46 @@
+-- Create (or Replace) Table Function 'Scan_IFS_for_String' 
+-- Using Functions IFS_OBJECT_STATISTICS & IFS_READ
+-- Accepts two Input parameters (IFS Directory & String to be Scanned)
+-- Returns Stream File, Line Number the string found and the corresponding line.
+CREATE OR REPLACE FUNCTION Scan_IFS_for_String 
+                    (INPUT_IFS_DIRECTORY VARCHAR(100), 
+                     SCAN_STRING CHAR(50))
+                 
+       RETURNS TABLE(STMF_NAME VARCHAR(100),
+                     LINE_NUMBER DECIMAL(5, 0),
+                     LINE VARCHAR(100))
+
+LANGUAGE SQL 
+MODIFIES SQL DATA 
+
+BEGIN
+    
+    -- Temporary table to return data
+    CREATE OR REPLACE TABLE QTEMP/RETURN_TABLE (STMF_NAME VARCHAR(100),
+                                     LINE_NUMBER DECIMAL(5, 0),
+                                     LINE VARCHAR(100)) ;
+    
+    DELETE FROM QTEMP/RETURN_TABLE ;
+                                     
+    -- Retrieve all the Streams file in the Input Directory
+    -- in a FOR loop to scan each stream file
+    -- Using Table Function 'IFS_OBJECT_STATISTICS'
+    FOR SELECT PATH_NAME AS IFS_PATH_NAME 
+        FROM TABLE(IFS_OBJECT_STATISTICS(
+                   START_PATH_NAME => INPUT_IFS_DIRECTORY,
+                   OBJECT_TYPE_LIST => '*ALLSTMF')) DO 
+        
+        -- Scan each Stream file using Table Function 'IFS_READ'
+        -- And insert the results into Temporary Table
+        INSERT INTO QTEMP/RETURN_TABLE 
+        SELECT IFS_PATH_NAME, LINE_NUMBER, LINE 
+        FROM TABLE(IFS_READ(
+                   PATH_NAME => IFS_PATH_NAME)) 
+        WHERE UPPER(LINE) like '%' || UPPER(TRIM(SCAN_STRING)) || '%';
+        
+    END FOR ;  
+    
+    -- Return Temporary Table
+    RETURN SELECT STMF_NAME, LINE_NUMBER, LINE FROM QTEMP/RETURN_TABLE ; 
+
+END ;
